@@ -8,7 +8,7 @@ from sklearn.metrics import accuracy_score
 
 import numpy as np
 import tensorflow.python.keras as keras
-import tensorflow as tf
+
 
 class KerasActiveLearner(ActiveLearner):
     def score(self, X: modALinput, y: modALinput, **score_kwargs) -> Any:
@@ -28,30 +28,6 @@ class DropoutActiveLearner(ActiveLearner):
         return sum(accs) / len(accs)
 
 
-from keras import backend as K
-def kostyl_sign(x):
-    try:
-        return x / abs(x)
-    except:
-        return 0
-
-
-def loss_fun(_, y_predicted):
-    def kostyl_sign(x):
-        try:
-            return x / abs(x)
-        except:
-            return 0
-
-
-    def loss(a, b):
-        t = -1.0 * kostyl_sign(a - b) * (a - b) + 0.001
-        t = (t + abs(t)) / 2.0
-        return t
-
-    b = y_predicted[-4:]
-    return sum([loss(b[i], b[i + 1]) for i in range(0, 4, 2)]) / 4
-
 class LearningLossActiveLearner(ActiveLearner):
     def __init__(self, loss_estimator, **al_init_kwargs):
         self.loss_estimator = loss_estimator
@@ -68,10 +44,6 @@ class LearningLossActiveLearner(ActiveLearner):
             self.estimator.fit(self.X_training, self.y_training, **fit_kwargs)
             y_predicted = self.estimator.predict(self.X_training)
             losses = keras.losses.mean_squared_error(self.y_training, y_predicted)
-            predicted_losses = tf.reshape(self.loss_estimator.predict(self.X_training), [-1])
-            # print('true losses', losses)
-            # print('predicted losses', predicted_losses)
-            # print('custom loss:', loss_fun(losses, predicted_losses))
             self.loss_estimator.fit(self.X_training, losses)
         else:
             n_instances = self.X_training.shape[0]
