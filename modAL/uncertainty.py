@@ -60,7 +60,7 @@ def _proba_entropy(proba: np.ndarray) -> np.ndarray:
     return np.transpose(entropy(np.transpose(proba)))
 
 
-def classifier_uncertainty(classifier: BaseEstimator, X: modALinput, **predict_proba_kwargs) -> np.ndarray:
+def classifier_uncertainty(classifier: BaseEstimator, X: modALinput, proba=True, **predict_kwargs) -> np.ndarray:
     """
     Classification uncertainty of the classifier for the provided samples.
 
@@ -74,7 +74,10 @@ def classifier_uncertainty(classifier: BaseEstimator, X: modALinput, **predict_p
     """
     # calculate uncertainty for each point provided
     try:
-        classwise_uncertainty = classifier.predict_proba(X, **predict_proba_kwargs)
+        if proba:
+            classwise_uncertainty = classifier.predict_proba(X, **predict_kwargs)
+        else:
+            classwise_uncertainty = classifier.predict(X, **predict_kwargs)
     except NotFittedError:
         return np.ones(shape=(X.shape[0], ))
 
@@ -110,7 +113,7 @@ def classifier_margin(classifier: BaseEstimator, X: modALinput, **predict_proba_
     return margin
 
 
-def classifier_entropy(classifier: BaseEstimator, X: modALinput, **predict_proba_kwargs) -> np.ndarray:
+def classifier_entropy(classifier: BaseEstimator, X: modALinput, proba=True, **predict_kwargs) -> np.ndarray:
     """
     Entropy of predictions of the for the provided samples.
 
@@ -123,7 +126,10 @@ def classifier_entropy(classifier: BaseEstimator, X: modALinput, **predict_proba
         Entropy of the class probabilities.
     """
     try:
-        classwise_uncertainty = classifier.predict_proba(X, **predict_proba_kwargs)
+        if proba:
+            classwise_uncertainty = classifier.predict_proba(X, **predict_kwargs)
+        else:
+            classwise_uncertainty = classifier.predict(X, **predict_kwargs)
     except NotFittedError:
         return np.zeros(shape=(X.shape[0], ))
 

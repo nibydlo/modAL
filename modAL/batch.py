@@ -10,7 +10,7 @@ from sklearn.metrics.pairwise import pairwise_distances, pairwise_distances_argm
 
 from modAL.utils.data import data_vstack, modALinput
 from modAL.models.base import BaseCommittee, BaseLearner
-from modAL.uncertainty import classifier_uncertainty
+from modAL.uncertainty import classifier_uncertainty, classifier_entropy
 
 
 def select_cold_start_instance(X: modALinput,
@@ -207,5 +207,18 @@ def uncertainty_batch_sampling(classifier: Union[BaseLearner, BaseCommittee],
     """
     uncertainty = classifier_uncertainty(classifier, X, **uncertainty_measure_kwargs)
     query_indices = ranked_batch(classifier, unlabeled=X, uncertainty_scores=uncertainty,
+                                 n_instances=n_instances, metric=metric, n_jobs=n_jobs)
+    return query_indices, X[query_indices]
+
+
+def entropy_batch_sampling(classifier: Union[BaseLearner, BaseCommittee],
+                               X: Union[np.ndarray, sp.csr_matrix],
+                               n_instances: int = 20,
+                               metric: Union[str, Callable] = 'euclidean',
+                               n_jobs: Optional[int] = None,
+                               **uncertainty_measure_kwargs
+                               ) -> Tuple[np.ndarray, Union[np.ndarray, sp.csr_matrix]]:
+    entropy = classifier_entropy(classifier, X, **uncertainty_measure_kwargs)
+    query_indices = ranked_batch(classifier, unlabeled=X, uncertainty_scores=entropy,
                                  n_instances=n_instances, metric=metric, n_jobs=n_jobs)
     return query_indices, X[query_indices]

@@ -77,8 +77,8 @@ class BaseLearner(ABC, BaseEstimator):
             If the classifier has been fitted, the features in X have to agree with the training samples which the
             classifier has seen.
         """
-        check_X_y(X, y, accept_sparse=True, ensure_2d=False, allow_nd=True, multi_output=True, dtype=None,
-                  force_all_finite=self.force_all_finite)
+        # check_X_y(X, y, accept_sparse=True, ensure_2d=False, allow_nd=True, multi_output=True, dtype=None,
+        #           force_all_finite=self.force_all_finite)
 
         if self.X_training is None:
             self.X_training = X

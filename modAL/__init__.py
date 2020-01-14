@@ -1,3 +1,3 @@
-from .models import ActiveLearner, Committee, CommitteeRegressor
+from .models import ActiveLearner, Committee, CommitteeRegressor, KerasActiveLearner, DropoutActiveLearner, LearningLossActiveLearner
 
-__all__ = ['ActiveLearner', 'Committee', 'CommitteeRegressor']
+__all__ = ['ActiveLearner', 'Committee', 'CommitteeRegressor', 'KerasActiveLearner', 'DropoutActiveLearner', 'LearningLossActiveLearner']
