@@ -14,8 +14,8 @@ import experiments.al_experiment as exp
 (x, y), (x_test, y_test) = get_categorical_mnist()
 
 POOL_SIZE = 10000
-INIT_SIZE = 20
-BATCH_SIZE = 10
+INIT_SIZE = 100
+BATCH_SIZE = 100
 
 n_labeled_examples = x.shape[0]
 training_indices = np.random.randint(low=0, high=n_labeled_examples, size=INIT_SIZE)
@@ -26,24 +26,20 @@ preset_learning_loss = partial(learning_loss_strategy, n_instances=BATCH_SIZE)
 es = EarlyStopping(monitor='val_accuracy', mode='max', min_delta=0.001, patience=3)
 
 
-
-for i in range(1, 2):
+for i in range(2, 3):
     training_indices = np.random.randint(low=0, high=n_labeled_examples, size=INIT_SIZE)
     x_train = x[training_indices]
     y_train = y[training_indices]
     x_pool = np.delete(x, training_indices, axis=0)
     y_pool = np.delete(y, training_indices, axis=0)
 
-    model_target, model_loss = get_learning_loss_model(batch_size=BATCH_SIZE)
+    model = get_learning_loss_model(batch_size=BATCH_SIZE)
     learning_loss_learner = LearningLossActiveLearner(
-        loss_estimator=model_loss,
-        estimator=model_target,
+        estimator=model,
         X_training=x_train,
         y_training=y_train,
         query_strategy=preset_learning_loss,
-        epochs=2,
         validation_data=(x_test, y_test),
-        callbacks=[es]
     )
 
     learning_loss_exp = exp.Experiment(
@@ -55,11 +51,11 @@ for i in range(1, 2):
         n_queries=15,
         random_seed=i,
         pool_size=POOL_SIZE,
-        name='mnist_learning_loss_' + str(i)
+        name='learning_loss_b100_l2_' + str(i)
     )
 
     learning_loss_exp.run()
     print('learning loss performance:', learning_loss_exp.performance_history)
     print('learning loss queries times:', learning_loss_exp.time_per_query_history)
     print('learning loss fits times:', learning_loss_exp.time_per_fit_history)
-    learning_loss_exp.save_state('statistic/mnist_learning_loss_' + str(i))
+    learning_loss_exp.save_state('statistic/learning_loss_b100_l2_' + str(i))

@@ -53,7 +53,8 @@ def select_instance(
         X_uncertainty: np.ndarray,
         mask: np.ndarray,
         metric: Union[str, Callable],
-        n_jobs: Union[int, None]
+        n_jobs: Union[int, None],
+        beta:float = 1.0
 ) -> Tuple[np.ndarray, modALinput, np.ndarray]:
     """
     Core iteration strategy for selecting another record from our unlabeled records.
@@ -106,7 +107,7 @@ def select_instance(
 
     # Compute our final scores, which are a balance between how dissimilar a given record
     # is with the records in X_uncertainty and how uncertain we are about its class.
-    scores = alpha * (1 - similarity_scores) + (1 - alpha) * X_uncertainty[mask]
+    scores = beta * alpha * (1 - similarity_scores) + (1 - alpha) * X_uncertainty[mask]
 
     # Isolate and return our best instance for labeling as the one with the largest score.
     best_instance_index_in_unlabeled = np.argmax(scores)
@@ -122,7 +123,8 @@ def ranked_batch(classifier: Union[BaseLearner, BaseCommittee],
                  uncertainty_scores: np.ndarray,
                  n_instances: int,
                  metric: Union[str, Callable],
-                 n_jobs: Union[int, None]) -> np.ndarray:
+                 n_jobs: Union[int, None],
+                 beta:float = 1.0) -> np.ndarray:
     """
     Query our top :n_instances: to request for labeling.
 
@@ -160,7 +162,7 @@ def ranked_batch(classifier: Union[BaseLearner, BaseCommittee],
         # Receive the instance and corresponding index from our unlabeled copy that scores highest.
         instance_index, instance, mask = select_instance(X_training=labeled, X_pool=unlabeled,
                                                          X_uncertainty=uncertainty_scores, mask=mask,
-                                                         metric=metric, n_jobs=n_jobs)
+                                                         metric=metric, n_jobs=n_jobs, beta=beta)
 
         # Add our instance we've considered for labeling to our labeled set. Although we don't
         # know it's label, we want further iterations to consider the newly-added instance so
@@ -216,9 +218,10 @@ def entropy_batch_sampling(classifier: Union[BaseLearner, BaseCommittee],
                                n_instances: int = 20,
                                metric: Union[str, Callable] = 'euclidean',
                                n_jobs: Optional[int] = None,
+                               beta: float = 1.0,
                                **uncertainty_measure_kwargs
                                ) -> Tuple[np.ndarray, Union[np.ndarray, sp.csr_matrix]]:
     entropy = classifier_entropy(classifier, X, **uncertainty_measure_kwargs)
     query_indices = ranked_batch(classifier, unlabeled=X, uncertainty_scores=entropy,
-                                 n_instances=n_instances, metric=metric, n_jobs=n_jobs)
+                                 n_instances=n_instances, metric=metric, n_jobs=n_jobs, beta=beta)
     return query_indices, X[query_indices]

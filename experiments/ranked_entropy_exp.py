@@ -16,10 +16,10 @@ from models.mnist_models import get_qbc_model
 POOL_SIZE = 9500
 INIT_SIZE = 500
 BATCH_SIZE = 10
-
+beta = 1.5
 n_labeled_examples = x.shape[0]
 
-preset_batch = partial(entropy_batch_sampling, n_instances=BATCH_SIZE, proba=False)
+preset_batch = partial(entropy_batch_sampling, n_instances=BATCH_SIZE, proba=False, beta=beta)
 es = EarlyStopping(monitor='val_accuracy', mode='max', min_delta=0.001, patience=3)
 
 for i in range(1, 6):
@@ -51,7 +51,7 @@ for i in range(1, 6):
         n_queries=30,
         random_seed=i,
         pool_size=POOL_SIZE,
-        name='ranked_batch_exp_' + str(i)
+        name='ranked_entropy_b_' + str(beta) + str(' ') +  str(i)
     )
 
     mnist_ranked_batch_exp.run()
@@ -59,4 +59,4 @@ for i in range(1, 6):
     print(mnist_ranked_batch_exp.performance_history)
     print(mnist_ranked_batch_exp.time_per_query_history)
     print(mnist_ranked_batch_exp.time_per_fit_history)
-    mnist_ranked_batch_exp.save_state('statistic/ranked_batch_' + str(i))
+    mnist_ranked_batch_exp.save_state('statistic/ranked_entropy_b_' + str(beta) + ' ' + str(i))

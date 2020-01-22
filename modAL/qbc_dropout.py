@@ -9,6 +9,7 @@ from sklearn.exceptions import NotFittedError
 from modAL.utils.data import modALinput
 from sklearn.base import BaseEstimator
 import scipy.sparse as sp
+from scipy.stats import entropy
 
 
 def dropout_uncertainty(classifier: BaseEstimator, X: modALinput, cmt_size=10, **predict_proba_kwargs) -> np.ndarray:
@@ -19,13 +20,8 @@ def dropout_uncertainty(classifier: BaseEstimator, X: modALinput, cmt_size=10, *
         except NotFittedError:
             return np.ones(shape=(X.shape[0], ))
 
-    max_means = []
-    for idx in range(X.shape[0]):
-        px = np.array([p[idx] for p in predictions])
-        max_means.append(px.mean(axis=0).max())
-
-    uncertainty = 1 - np.array(max_means)
-    return uncertainty
+    mean_predictions = np.mean(predictions, axis=0)
+    return np.transpose(entropy(np.transpose(mean_predictions)))
 
 
 def qbc_dropout_strategy(classifier: Union[BaseLearner, BaseCommittee],

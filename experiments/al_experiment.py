@@ -93,7 +93,6 @@ class Experiment:
         self.time_per_query_history.append(time.time() - start_time_query)
         X, y = self.X_pool[query_index], self.y_pool[query_index]
         start_time_fit = time.time()
-        # self.learner.teach(X=X, y=y, validation_data=(self.X_val, self.y_val))
         self.learner.teach(X=X, y=y)
 
         self.time_per_fit_history.append(time.time() - start_time_fit)

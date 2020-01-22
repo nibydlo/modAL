@@ -14,7 +14,7 @@ from models.mnist_models import get_qbc_model
 
 POOL_SIZE = 9500
 INIT_SIZE = 500
-BATCH_SIZE = 10
+BATCH_SIZE = 20
 
 n_labeled_examples = x.shape[0]
 
@@ -49,7 +49,7 @@ for i in range(1, 6):
         n_queries=30,
         random_seed=i,
         pool_size=POOL_SIZE,
-        name='entropy_batch_exp_' + str(i)
+        name='entropy_i500_b20_' + str(i)
     )
 
     mnist_ranked_batch_exp.run()
@@ -57,4 +57,4 @@ for i in range(1, 6):
     print(mnist_ranked_batch_exp.performance_history)
     print(mnist_ranked_batch_exp.time_per_query_history)
     print(mnist_ranked_batch_exp.time_per_fit_history)
-    mnist_ranked_batch_exp.save_state('statistic/entropy_batch_' + str(i))
+    mnist_ranked_batch_exp.save_state('statistic/entropy_i500_b20_' + str(i))
