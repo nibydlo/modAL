@@ -9,6 +9,7 @@ import pickle
 import time
 import logging
 
+from modAL import LearningLossActiveLearner
 from modAL.models.base import BaseLearner, BaseCommittee
 
 random_name_length = 5
@@ -31,7 +32,8 @@ class Experiment:
             n_queries: int = 10,
             random_seed: int = random.randint(0, 100),
             pool_size: int = -1,
-            name: str = get_random_name()
+            name: str = get_random_name(),
+            **teach_kwargs
     ):
         self.learner = learner
         self.n_queries = n_queries
@@ -52,6 +54,7 @@ class Experiment:
         self.time_per_fit_history = []
         self.name = name
         self._setup_logger()
+        self.teach_kwargs = teach_kwargs
 
     def _setup_logger(self):
         self.logger = logging.getLogger('experiment_' + self.name)
@@ -77,6 +80,9 @@ class Experiment:
             'time_per_query_history' : self.time_per_query_history,
             'time_per_fit_history' : self.time_per_fit_history
         }
+        if isinstance(self.learner, LearningLossActiveLearner):
+            state['loss_history'] = self.learner.loss_history
+            state['learning_loss_history'] = self.learner.learning_loss_history
         with open(state_name + '.pkl', 'wb') as f:
             pickle.dump(state, f)
 
@@ -93,7 +99,7 @@ class Experiment:
         self.time_per_query_history.append(time.time() - start_time_query)
         X, y = self.X_pool[query_index], self.y_pool[query_index]
         start_time_fit = time.time()
-        self.learner.teach(X=X, y=y)
+        self.learner.teach(X=X, y=y, **self.teach_kwargs)
 
         self.time_per_fit_history.append(time.time() - start_time_fit)
         self.X_pool = np.delete(self.X_pool, query_index, axis=0)

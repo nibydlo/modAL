@@ -51,11 +51,13 @@ for i in range(2, 3):
         n_queries=15,
         random_seed=i,
         pool_size=POOL_SIZE,
-        name='learning_loss_b100_l2_' + str(i)
+        name='ll_w64_i100_b100_' + str(i)
     )
 
     learning_loss_exp.run()
     print('learning loss performance:', learning_loss_exp.performance_history)
     print('learning loss queries times:', learning_loss_exp.time_per_query_history)
     print('learning loss fits times:', learning_loss_exp.time_per_fit_history)
-    learning_loss_exp.save_state('statistic/learning_loss_b100_l2_' + str(i))
+    print('target loss history:', learning_loss_exp.learner.loss_history)
+    print('loss prediction loss history', learning_loss_exp.learner.learning_loss_history)
+    learning_loss_exp.save_state('statistic/ll_w64_i100_b100_' + str(i))

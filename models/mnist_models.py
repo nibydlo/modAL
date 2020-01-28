@@ -45,8 +45,16 @@ def get_learning_loss_model(batch_size=10):
             t = -1.0 * tf.math.sign(t_i - t_j) * (p_i - p_j) + EPS
             t = (t + abs(t)) / 2.0
             return t
+
         batch_true = tf.reshape(y_true[-batch_size:], [-1, 2])
         batch_predicted = tf.reshape(y_predicted[-batch_size:], [-1, 2])
+        # indices = tf.random.uniform(
+        #     shape=[batch_size],
+        #     maxval=tf.shape(y_true)[0],
+        #     dtype=tf.int32)
+        # batch_true = tf.reshape(tf.gather(y_true, indices), [-1, 2])
+        # batch_predicted = tf.reshape(tf.gather(y_predicted, indices), [-1, 2])
+
         stacked = tf.stack([batch_true, batch_predicted], axis=1)
         res = tf.reduce_sum(tf.map_fn(loss, stacked))
         return res
@@ -59,7 +67,8 @@ def get_learning_loss_model(batch_size=10):
 
     y1 = keras.layers.GlobalAveragePooling2D()(x)
     y1 = Flatten()(y1)
-    y1 = Dense(128, activation='relu')(y1)
+    # y1 = Dense(128, activation='relu')(y1)
+    y1 = Dense(64, activation='relu')(y1)
 
     x = Conv2D(64, kernel_size=(3, 3), padding='Same', activation='relu')(inp)
     x = Conv2D(64, kernel_size=(3, 3), padding='Same', activation='relu')(x)
@@ -68,15 +77,18 @@ def get_learning_loss_model(batch_size=10):
 
     y2 = keras.layers.GlobalAveragePooling2D()(x)
     y2 = Flatten()(y2)
-    y2 = Dense(128, activation='relu')(y2)
+    # y2 = Dense(128, activation='relu')(y2)
+    y2 = Dense(64, activation='relu')(y2)
 
     x = Flatten()(x)
     x = Dense(256, activation='relu')(x)
     x = Dropout(0.25)(x)
 
-    y3 = Dense(128, activation='relu')(x)
+    # y3 = Dense(128, activation='relu')(x)
+    y3 = Dense(64, activation='relu')(x)
     y = keras.layers.concatenate([y1, y2, y3])
-    y = Dense(128, activation='relu')(y)
+    # y = Dense(128, activation='relu')(y)
+    y = Dense(64, activation='relu')(y)
 
     out_target = Dense(num_classes, activation='softmax', name='target_output')(x)
     out_loss = Dense(1, name='loss_output')(y)
