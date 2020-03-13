@@ -86,7 +86,7 @@ def classifier_uncertainty(classifier: BaseEstimator, X: modALinput, proba=True,
     return uncertainty
 
 
-def classifier_margin(classifier: BaseEstimator, X: modALinput, **predict_proba_kwargs) -> np.ndarray:
+def classifier_margin(classifier: BaseEstimator, X: modALinput, proba=True, **predict_kwargs) -> np.ndarray:
     """
     Classification margin uncertainty of the classifier for the provided samples. This uncertainty measure takes the
     first and second most likely predictions and takes the difference of their probabilities, which is the margin.
@@ -100,7 +100,11 @@ def classifier_margin(classifier: BaseEstimator, X: modALinput, **predict_proba_
         Margin uncertainty, which is the difference of the probabilities of first and second most likely predictions.
     """
     try:
-        classwise_uncertainty = classifier.predict_proba(X, **predict_proba_kwargs)
+        # classwise_uncertainty = classifier.predict_proba(X, **predict_proba_kwargs)
+        if proba:
+            classwise_uncertainty = classifier.predict_proba(X, **predict_kwargs)
+        else:
+            classwise_uncertainty = classifier.predict(X, **predict_kwargs)
     except NotFittedError:
         return np.zeros(shape=(X.shape[0], ))
 
@@ -136,6 +140,33 @@ def classifier_entropy(classifier: BaseEstimator, X: modALinput, proba=True, **p
     return np.transpose(entropy(np.transpose(classwise_uncertainty)))
 
 
+def classifier_top_entropy(classifier: BaseEstimator, X: modALinput, n_top: int, proba=True, **predict_kwargs) -> np.ndarray:
+    """
+    Entropy of top 5 predictions of the for the provided samples.
+
+    Args:
+        classifier: The classifier for which the prediction entropy is to be measured.
+        X: The samples for which the prediction entropy is to be measured.
+        n_top: number of top classes to calculate entropy for
+        proba: use predict_proba or juct predict
+        **predict_proba_kwargs: Keyword arguments to be passed for the :meth:`predict_proba` of the classifier.
+
+    Returns:
+        Entropy of the class probabilities.
+    """
+    try:
+        if proba:
+            classwise_uncertainty = classifier.predict_proba(X, **predict_kwargs)
+        else:
+            classwise_uncertainty = classifier.predict(X, **predict_kwargs)
+    except NotFittedError:
+        return np.zeros(shape=(X.shape[0], ))
+
+    classwise_uncertainty.sort(axis=1)
+    classwise_uncertainty_top = classwise_uncertainty[:, -n_top:]
+    return np.transpose(entropy(np.transpose(classwise_uncertainty_top)))
+
+
 def uncertainty_sampling(classifier: BaseEstimator, X: modALinput,
                          n_instances: int = 1, random_tie_break: bool = False,
                          **uncertainty_measure_kwargs) -> Tuple[np.ndarray, modALinput]:
@@ -162,6 +193,8 @@ def uncertainty_sampling(classifier: BaseEstimator, X: modALinput,
     else:
         query_idx = shuffled_argmax(uncertainty, n_instances=n_instances)
 
+    if isinstance(X, list) and isinstance(X[0], np.ndarray):
+        return query_idx, [x[query_idx] for x in X]
     return query_idx, X[query_idx]
 
 
@@ -190,6 +223,8 @@ def margin_sampling(classifier: BaseEstimator, X: modALinput,
     else:
         query_idx = shuffled_argmax(-margin, n_instances=n_instances)
 
+    if isinstance(X, list) and isinstance(X[0], np.ndarray):
+        return query_idx, [x[query_idx] for x in X]
     return query_idx, X[query_idx]
 
 
@@ -220,4 +255,40 @@ def entropy_sampling(classifier: BaseEstimator, X: modALinput,
     else:
         query_idx = shuffled_argmax(entropy, n_instances=n_instances)
 
+    if isinstance(X, list) and isinstance(X[0], np.ndarray):
+        return query_idx, [x[query_idx] for x in X]
+    return query_idx, X[query_idx]
+
+
+def entropy_top_sampling(classifier: BaseEstimator, X: modALinput,
+                       n_instances: int = 1, random_tie_break: bool = False,
+                       n_top: int = 5,
+                       **uncertainty_measure_kwargs) -> Tuple[np.ndarray, modALinput]:
+    """
+    Entropy sampling query strategy. Selects the instances where the class probabilities
+    have the largest entropy.
+
+    Args:
+        classifier: The classifier for which the labels are to be queried.
+        X: The pool of samples to query from.
+        n_instances: Number of samples to be queried.
+        random_tie_break: If True, shuffles utility scores to randomize the order. This
+            can be used to break the tie when the highest utility score is not unique.
+        n_top: number of top classes to calculate entropy
+        **uncertainty_measure_kwargs: Keyword arguments to be passed for the uncertainty
+            measure function.
+
+    Returns:
+        The indices of the instances from X chosen to be labelled;
+        the instances from X chosen to be labelled.
+    """
+    entropy = classifier_top_entropy(classifier, X, n_top, **uncertainty_measure_kwargs)
+
+    if not random_tie_break:
+        query_idx = multi_argmax(entropy, n_instances=n_instances)
+    else:
+        query_idx = shuffled_argmax(entropy, n_instances=n_instances)
+
+    if isinstance(X, list) and isinstance(X[0], np.ndarray):
+        return query_idx, [x[query_idx] for x in X]
     return query_idx, X[query_idx]
