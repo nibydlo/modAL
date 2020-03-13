@@ -142,7 +142,7 @@ def classifier_entropy(classifier: BaseEstimator, X: modALinput, proba=True, **p
 
 def classifier_top_entropy(classifier: BaseEstimator, X: modALinput, n_top: int, proba=True, **predict_kwargs) -> np.ndarray:
     """
-    Entropy of top 5 predictions of the for the provided samples.
+    Entropy of top n predictions of the for the provided samples.
 
     Args:
         classifier: The classifier for which the prediction entropy is to be measured.
