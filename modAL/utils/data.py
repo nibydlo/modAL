@@ -21,6 +21,8 @@ def data_vstack(blocks: Container) -> modALinput:
     if isinstance(blocks[0], np.ndarray):
         return np.concatenate(blocks)
     elif isinstance(blocks[0], list):
+        if isinstance(blocks[0][0], np.ndarray):
+            return [np.concatenate([blocks[i][j] for i in range(len(blocks))]) for j in range(len(blocks[0]))]
         return list(chain(blocks))
     elif sp.issparse(blocks[0]):
         return sp.vstack(blocks)
