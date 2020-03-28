@@ -1,11 +1,13 @@
 import torch
+from scipy import stats
 from torch.utils.data import TensorDataset, DataLoader
 import torch.nn.functional as F
 import numpy as np
 
 IMG_LEN = 1024
 TXT_LEN = 300
-BATCH_SIZE=512
+BATCH_SIZE = 512
+
 
 class TopicsDecorator:
     """
@@ -17,18 +19,23 @@ class TopicsDecorator:
         self.optimizer = optimizer
         self.scheduler = scheduler
 
-    def fit(self, X, y, epochs=1, validation_data=None):
+    def fit(self, X, y, epochs=1, validation_data=None, weight_norm=False):
         x_img = X[0]
         x_txt = X[1]
         print('fit on ' + str(X[0].shape[0]) + ' objects')
 
-        BATCH_SIZE = 512
+        p = np.random.permutation(len(x_img))
+        x_img = x_img[p]
+        x_txt = x_txt[p]
+        y = y[p]
 
         x_img_train_t = torch.tensor(x_img).float()
         x_txt_train_t = torch.tensor(x_txt).float()
         y_train_t = torch.tensor(y)
         train_ds = TensorDataset(x_img_train_t, x_txt_train_t, y_train_t)
-        train_loader = DataLoader(train_ds, batch_size=BATCH_SIZE)
+
+        cur_batch_size = BATCH_SIZE + (len(x_img) % BATCH_SIZE) // ((len(x_img) // BATCH_SIZE)) + 1
+        train_loader = DataLoader(train_ds, batch_size=cur_batch_size)
 
         if validation_data is not None:
             x_img_val_t = torch.tensor(validation_data[0][0]).float()
@@ -44,12 +51,28 @@ class TopicsDecorator:
             loss_count = 0
 
             for x_img_cur, x_txt_cur, y_cur in train_loader:
-                self.model.zero_grad()
-                output = self.model(x_img_cur, x_txt_cur)
-                loss = F.nll_loss(output, torch.argmax(y_cur, dim=1))
-                loss.backward()
 
+                self.optimizer.zero_grad()
+                output = self.model(x_img_cur, x_txt_cur)
+                if not weight_norm:
+                    loss = F.nll_loss(output, torch.argmax(y_cur, dim=1))
+                else:
+                    loss_non_reducted = F.nll_loss(output, torch.argmax(y_cur, dim=1), reduction='none')
+
+                    output_detached = output.detach()
+                    predictions = torch.exp(output_detached)
+                    weights = torch.t(torch.tensor(stats.entropy(torch.t(predictions))))
+
+                    norm_loss = loss_non_reducted * weights
+                    norm_loss /= sum(norm_loss) / sum(loss_non_reducted)
+
+                    assert abs(sum(norm_loss) - sum(loss_non_reducted)) < 1e-2
+
+                    loss = torch.mean(loss_non_reducted)
+
+                loss.backward()
                 loss_sum += loss
+
                 loss_count += 1
 
                 self.optimizer.step()
@@ -79,8 +102,13 @@ class TopicsDecorator:
 
                 print('val_acc:', correct / total, 'val_avg_loss:', loss_sum / loss_count)
 
-    def predict(self, X):
-        self.model.eval()
+    def predict(self, X, with_dropout=False):
+
+        if with_dropout:
+            self.model.train()
+        else:
+            self.model.eval()
+
         x_img_t = torch.tensor(X[0])
         x_txt_t = torch.tensor(X[1])
 
@@ -95,8 +123,8 @@ class TopicsDecorator:
 
         return predictions.numpy()
 
-    def predict_proba(self, X):
-        y_predicted = self.predict(X)
+    def predict_proba(self, X, **predict_kwargs):
+        y_predicted = self.predict(X, **predict_kwargs)
         return np.exp(y_predicted)
 
     def evaluate(self, X, y, verbose=0):
@@ -107,10 +135,12 @@ class TopicsDecorator:
         total = 0.0
         y_predicted_non_cat = y_predicted.argmax(axis=1)
         y_true_non_cat = y.argmax(axis=1)
+
         for i in range(y_predicted.shape[0]):
             if y_predicted_non_cat[i] == y_true_non_cat[i]:
                 correct += 1
             total += 1
 
-        return loss, correct/total
+        print('val acc', correct / total)
 
+        return loss, correct / total
