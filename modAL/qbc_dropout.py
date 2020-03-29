@@ -75,7 +75,7 @@ def qbc_uncertainty_sampling(
     return query_idx, new_batch
 
 
-dis_func = np.vectorize(lambda x: x * math.log(x))
+dis_func = np.vectorize(lambda x: 0 if x == 0 else x * math.log(x))
 
 
 def bald_sampling(
