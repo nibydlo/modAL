@@ -20,7 +20,7 @@ def get_least_confidence(predictions):
 def get_margin(predictions):
     part = np.partition(-predictions, 1, axis=1)
     margin = - part[:, 0] + part[:, 1]
-    return margin
+    return -margin
 
 
 def get_entropy(predictions):
