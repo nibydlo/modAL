@@ -98,12 +98,6 @@ def sud(classifier: BaseEstimator,
 
     top_uncertain_idx = multi_argmax(uncertainty, n_instances=top_uncertain)
 
-    print('uncertain candidate', np.array(
-        [np.mean(
-            ball_tree.query(x.reshape(1, -1), k=k_neighbours, return_distance=True)[0]
-        ) for x in (X[top_uncertain_idx])]
-    )[:10])
-
     top_uncertain_density = \
         1 / np.array(
             [np.mean(
@@ -116,16 +110,10 @@ def sud(classifier: BaseEstimator,
                 ) for x in (X[top_uncertain_idx])]
             )
 
-    print('actual uncertain', top_uncertain_density[:10])
-
-
-
     if with_mult:
         sud_measure = uncertainty[top_uncertain_idx] * top_uncertain_density
     else:
         sud_measure = top_uncertain_density
-
-    print('sud_measure', sud_measure[:10])
 
     query_idx = top_uncertain_idx[multi_argmax(sud_measure, n_instances=n_instances)]
     return query_idx, np.array([])
