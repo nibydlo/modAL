@@ -25,8 +25,9 @@ def similarize_distance(distance_measure: Callable) -> Callable:
     Returns:
         The information_density measure obtained from the given distance measure.
     """
+
     def sim(*args, **kwargs):
-        return 1/(1 + distance_measure(*args, **kwargs))
+        return 1 / (1 + distance_measure(*args, **kwargs))
 
     return sim
 
@@ -56,14 +57,18 @@ def information_density(X: modALinput, metric: Union[str, Callable] = 'euclidean
     #
     # return inf_density/X.shape[0]
 
-    similarity_mtx = 1/(1+pairwise_distances(X, X, metric=metric))
+    similarity_mtx = 1 / (1 + pairwise_distances(X, X, metric=metric))
 
     return similarity_mtx.mean(axis=1)
 
 
+def classifier_modified_margin(classifier: BaseEstimator, X: modALinput, proba=True, **predict_kwargs) -> np.ndarray:
+    return 1 - classifier_margin(classifier, X, proba)
+
+
 uncertainty_measure_dict = {
     'least_confident': classifier_uncertainty,
-    'margin': classifier_margin,
+    'margin': classifier_modified_margin,
     'entropy': classifier_entropy
 }
 
@@ -74,10 +79,15 @@ def sud(classifier: BaseEstimator,
         k_neighbours: int = 20,
         uncertainty_measure='entropy',
         transform=None,
+        top_uncertain=1000,
+        with_mult=True,
+        sparse=False,
         **uncertainty_measure_kwargs) -> Tuple[np.ndarray, modALinput]:
-
     if uncertainty_measure not in uncertainty_measure_dict:
         raise ValueError('uncertainty measure can be equal only to "least_confident", "margin" or "entropy"')
+
+    print('with_mult', with_mult)
+    print('sparse', sparse)
 
     uncertainty = uncertainty_measure_dict[uncertainty_measure](classifier, X, **uncertainty_measure_kwargs)
 
@@ -85,19 +95,37 @@ def sud(classifier: BaseEstimator,
         X = transform(X)
 
     ball_tree = BallTree(X, leaf_size=5)
-    # density = []
-    # for i in range(len(X) // 1000 + 1):
-    #     print('i =', i)
-    #     density_batch = \
-    #         [
-    #             np.mean(ball_tree.query(x.reshape(1, -1), k=k_neighbours, return_distance=True)[0]) for x in X[i * 1000 : (i + 1) * 1000]
-    #         ]
-    #     density += density_batch
-    #
-    # density = np.array(density)
 
-    density = np.array([np.mean(ball_tree.query(x.reshape(1, -1), k=k_neighbours, return_distance=True)[0]) for x in X])
+    top_uncertain_idx = multi_argmax(uncertainty, n_instances=top_uncertain)
 
-    sud_measure = uncertainty * density
-    query_idx = multi_argmax(sud_measure, n_instances=n_instances)
+    print('uncertain candidate', np.array(
+        [np.mean(
+            ball_tree.query(x.reshape(1, -1), k=k_neighbours, return_distance=True)[0]
+        ) for x in (X[top_uncertain_idx])]
+    )[:10])
+
+    top_uncertain_density = \
+        1 / np.array(
+            [np.mean(
+                ball_tree.query(x.reshape(1, -1), k=k_neighbours, return_distance=True)[0]
+            ) for x in (X[top_uncertain_idx])]
+        ) if not sparse else \
+            np.array(
+                [np.mean(
+                    ball_tree.query(x.reshape(1, -1), k=k_neighbours, return_distance=True)[0]
+                ) for x in (X[top_uncertain_idx])]
+            )
+
+    print('actual uncertain', top_uncertain_density[:10])
+
+
+
+    if with_mult:
+        sud_measure = uncertainty[top_uncertain_idx] * top_uncertain_density
+    else:
+        sud_measure = top_uncertain_density
+
+    print('sud_measure', sud_measure[:10])
+
+    query_idx = top_uncertain_idx[multi_argmax(sud_measure, n_instances=n_instances)]
     return query_idx, np.array([])
