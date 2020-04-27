@@ -44,6 +44,86 @@ class NormModel(nn.Module):
         return x
 
 
+class NormModelBN(nn.Module):
+    def __init__(self, drop=0.5, d=128):
+        super().__init__()
+
+        self.fc_img_1 = nn.Linear(IMG_LEN, 4 * d)
+        self.bn_img_1 = nn.BatchNorm1d(num_features=4 * d)
+        self.fc_img_2 = nn.Linear(4 * d, 2 * d)
+        self.bn_img_2 = nn.BatchNorm1d(num_features=2 * d)
+
+        self.fc_txt_1 = nn.Linear(TXT_LEN, 2 * d)
+        self.bn_txt_1 = nn.BatchNorm1d(num_features=2 * d)
+        self.fc_txt_2 = nn.Linear(2 * d, 2 * d)
+        self.bn_txt_2 = nn.BatchNorm1d(num_features=2 * d)
+
+        self.fc_1 = nn.Linear(4 * d, d)
+        self.bn_1 = nn.BatchNorm1d(num_features=d)
+        self.fc_2 = nn.Linear(d, d)
+        self.bn_2 = nn.BatchNorm1d(num_features=d)
+        self.out = nn.Linear(d, N_CLASSES)
+
+        self.dropout = nn.modules.Dropout(p=drop)
+
+    def forward(self, inp_img, inp_txt):
+        x_img = self.dropout(self.bn_img_1(F.relu(self.fc_img_1(inp_img))))
+        x_img = self.dropout(self.bn_img_2(F.relu(self.fc_img_2(x_img))))
+
+        x_txt = self.dropout(self.bn_txt_1(F.relu(self.fc_txt_1(inp_txt))))
+        x_txt = self.dropout(self.bn_txt_2(F.relu(self.fc_txt_2(x_txt))))
+
+        x = torch.cat((x_img, x_txt), 1)
+        x = self.dropout(self.bn_1(F.relu(self.fc_1(x))))
+        x = self.bn_2(F.relu(self.fc_2(x)))
+
+        x = F.log_softmax(self.out(x), dim=1)
+        return x
+
+
+class NormModelTrident(nn.Module):
+    def __init__(self, d=128, drop=0.25, residual=False):
+        super().__init__()
+        self.residual = residual
+
+        self.fc_img_1 = nn.Linear(IMG_LEN, d * 4)
+        self.fc_img_2 = nn.Linear(d * 4, d * 2)
+
+        self.fc_txt_1 = nn.Linear(TXT_LEN, d * 2)
+        self.fc_txt_2 = nn.Linear(d * 2, d * 2)
+
+        self.fc1 = nn.Linear(d * 4, d if not residual else d * 2)
+        self.fc2 = nn.Linear(d if not residual else d * 6, d)
+        self.out = nn.Linear(d, N_CLASSES)
+
+        self.out_img = nn.Linear(d * 2, N_CLASSES)
+        self.out_txt = nn.Linear(d * 2, N_CLASSES)
+
+        self.dropout = nn.modules.Dropout(p=drop)
+
+    def forward(self, inp_img, inp_txt):
+        x_img = F.relu(self.fc_img_1(inp_img))
+        x_img = self.dropout(x_img)
+        x_img = F.relu(self.fc_img_2(x_img))
+        x_img = self.dropout(x_img)
+
+        x_txt = F.relu(self.fc_txt_1(inp_txt))
+        x_txt = self.dropout(x_txt)
+        x_txt = F.relu(self.fc_txt_2(x_txt))
+        x_txt = self.dropout(x_txt)
+
+        x = torch.cat((x_img, x_txt), 1)
+        x = F.relu(self.fc1(x))
+        x = self.dropout(x)
+        x = F.relu(self.fc2(x if not self.residual else torch.cat((x_img, x_txt, x), 1)))
+
+        out = F.log_softmax(self.out(x), dim=1)
+        out_img = F.log_softmax(self.out_img(x_img), dim=1)
+        out_txt = F.log_softmax(self.out_txt(x_txt), dim=1)
+
+        return out, out_img, out_txt
+
+
 class SelfAttentionModel1(nn.Module):
     def __init__(self):
         super().__init__()
@@ -235,7 +315,7 @@ class Encoder(nn.Module):
         x_txt = self.fc_txt(inp_txt)
 
         x = torch.cat((x_img, x_txt), 1)
-        x = F.relu(x)
+        x = F.relu(self.fc(x))
         return x
 
 
