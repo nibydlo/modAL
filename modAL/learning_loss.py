@@ -13,7 +13,7 @@ def learning_loss_strategy(classifier: Union[BaseLearner, BaseCommittee],
                            n_instances: int = 20,
                            **predict_kwargs
                            ) -> Tuple[np.ndarray, Union[np.ndarray, sp.csr_matrix]]:
-    losses = classifier.predict_loss(X, **predict_kwargs)
+    losses = classifier.estimator.predict_loss(X, **predict_kwargs)
     query_idx = multi_argmax(losses, n_instances=n_instances).squeeze(axis=1)
-    return query_idx, X[query_idx]
+    return query_idx, np.array([])
 
