@@ -1,5 +1,6 @@
 import torch
 from scipy import stats
+from torch import nn
 from torch.utils.data import TensorDataset, DataLoader
 import torch.nn.functional as F
 import numpy as np
@@ -10,7 +11,7 @@ BATCH_SIZE = 512
 #BATCH_SIZE = 2048
 
 
-def prepare_train_loader(X, y):
+def prepare_train_loader(X, y, verbose=0):
     x_img = X[0]
     x_txt = X[1]
 
@@ -24,7 +25,12 @@ def prepare_train_loader(X, y):
     y_train_t = torch.tensor(y)
     train_ds = TensorDataset(x_img_train_t, x_txt_train_t, y_train_t)
 
-    cur_batch_size = BATCH_SIZE + (len(x_img) % BATCH_SIZE) // ((len(x_img) // BATCH_SIZE)) + 1
+    cur_batch_size = BATCH_SIZE + (len(x_img) % BATCH_SIZE) // (len(x_img) // BATCH_SIZE)
+    cur_batch_size += 2 if not cur_batch_size % 2 else 1
+
+    if verbose != 0:
+        print('current batch size =', cur_batch_size)
+
     train_loader = DataLoader(train_ds, batch_size=cur_batch_size)
     return train_loader
 
@@ -62,30 +68,8 @@ class TopicsDecorator:
         if verbose != 0:
             print('fit on ' + str(X[0].shape[0]) + ' objects')
 
-        # x_img = X[0]
-        # x_txt = X[1]
-        # print('fit on ' + str(X[0].shape[0]) + ' objects')
-        #
-        # p = np.random.permutation(len(x_img))
-        # x_img = x_img[p]
-        # x_txt = x_txt[p]
-        # y = y[p]
-        #
-        # x_img_train_t = torch.tensor(x_img).float()
-        # x_txt_train_t = torch.tensor(x_txt).float()
-        # y_train_t = torch.tensor(y)
-        # train_ds = TensorDataset(x_img_train_t, x_txt_train_t, y_train_t)
-        #
-        # cur_batch_size = BATCH_SIZE + (len(x_img) % BATCH_SIZE) // ((len(x_img) // BATCH_SIZE)) + 1
-        # train_loader = DataLoader(train_ds, batch_size=cur_batch_size)
         train_loader = prepare_train_loader(X, y)
 
-        # if validation_data is not None:
-        #     x_img_val_t = torch.tensor(validation_data[0][0]).float()
-        #     x_txt_val_t = torch.tensor(validation_data[0][1]).float()
-        #     y_val_t = torch.tensor(validation_data[1])
-        #     val_ds = TensorDataset(x_img_val_t, x_txt_val_t, y_val_t)
-        #     val_loader = DataLoader(val_ds, batch_size=BATCH_SIZE)
         if validation_data is not None:
             val_loader = prepare_val_loader(validation_data)
 
@@ -222,7 +206,7 @@ class LearningLossDecorator:
         if verbose != 0:
             print('fit learning loss decorator on', X[0].shape[0], 'objects')
 
-        train_loader = prepare_train_loader(X, y)
+        train_loader = prepare_train_loader(X, y, verbose=verbose)
 
         for epoch in range(epochs):
             if verbose != 0:
@@ -235,6 +219,7 @@ class LearningLossDecorator:
             loss_loss_count = 0
 
             for x_img_cur, x_txt_cur, y_cur in train_loader:
+
                 self.ll_optimizer.zero_grad()
                 output = self.decorated_model.model(x_img_cur, x_txt_cur).detach()
                 actual_loss = F.nll_loss(output, torch.argmax(y_cur, dim=1), reduction='none')
@@ -372,6 +357,9 @@ class TridentDecorator:
 
         if with_dropout:
             self.model.train()
+            for m in self.model.modules():
+                if isinstance(m, nn.BatchNorm1d):
+                    m.eval()
         else:
             self.model.eval()
 
