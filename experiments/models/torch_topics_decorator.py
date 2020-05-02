@@ -1,3 +1,5 @@
+import copy
+
 import torch
 from scipy import stats
 from torch import nn
@@ -27,9 +29,6 @@ def prepare_train_loader(X, y, verbose=0):
 
     cur_batch_size = BATCH_SIZE + (len(x_img) % BATCH_SIZE) // (len(x_img) // BATCH_SIZE)
     cur_batch_size += 2 if not cur_batch_size % 2 else 1
-
-    if verbose != 0:
-        print('current batch size =', cur_batch_size)
 
     train_loader = DataLoader(train_ds, batch_size=cur_batch_size)
     return train_loader
@@ -158,6 +157,9 @@ class TopicsDecorator:
 
         if with_dropout:
             self.model.train()
+            for m in self.model.modules():
+                if isinstance(m, nn.BatchNorm1d):
+                    m.eval()
         else:
             self.model.eval()
 
@@ -214,6 +216,7 @@ class LearningLossDecorator:
 
             self.ll_model.train()
             self.decorated_model.model.eval()
+            decorated_model_copy = copy.deepcopy(self.decorated_model.model)
 
             loss_loss_sum = 0.0
             loss_loss_count = 0
@@ -221,7 +224,8 @@ class LearningLossDecorator:
             for x_img_cur, x_txt_cur, y_cur in train_loader:
 
                 self.ll_optimizer.zero_grad()
-                output = self.decorated_model.model(x_img_cur, x_txt_cur).detach()
+                with torch.no_grad():
+                    output = self.decorated_model.model(x_img_cur, x_txt_cur).detach()
                 actual_loss = F.nll_loss(output, torch.argmax(y_cur, dim=1), reduction='none')
                 if self.ll_version == 3:
                     predicted_loss = self.ll_model(x_img_cur, x_txt_cur)
@@ -236,8 +240,11 @@ class LearningLossDecorator:
                 self.ll_optimizer.step()
 
             if verbose != 0:
-                print('avg train loss_loss', loss_loss_sum / loss_loss_count)
-
+                print('start comparing parameters')
+                for p1, p2 in zip(decorated_model_copy.parameters(), self.decorated_model.model.parameters()):
+                    if p1.data.ne(p2.data).sum() > 0:
+                        print('decorated model changed')
+                print('parameters comparison finished')
             self.decorated_model.fit(X, y, epochs=1, **decorated_model_fit_kwargs)
 
     def predict(self, X, with_dropout=False):
@@ -304,6 +311,8 @@ class TridentDecorator:
             val_ds = TensorDataset(x_img_val_t, x_txt_val_t, y_val_t)
             val_loader = DataLoader(val_ds, batch_size=BATCH_SIZE)
 
+        prev_train_loss = None
+        tol_epochs = 0
         for epoch in range(epochs):
             self.model.train()
 
@@ -330,6 +339,7 @@ class TridentDecorator:
                 if self.scheduler is not None:
                     self.scheduler.step()
 
+            avg_train_loss = loss_sum / loss_count
             print('epoch:', epoch, 'train_loss:', loss, 'average train loss', loss_sum / loss_count)
 
             if validation_data is not None:
@@ -352,6 +362,22 @@ class TridentDecorator:
                             total += 1
 
                 print('val_acc:', correct / total, 'val_avg_loss:', loss_sum / loss_count)
+
+            # es part
+            if es_dif is not None and epoch != 0:
+                if tol_epochs != 0:  # already in tolerance mode
+                    if prev_train_loss - avg_train_loss > es_dif:  # leave tolerance mode
+                        tol_epochs = 0
+                    elif tol_epochs >= es_tol:  # tolerance limit exceeded
+                        return
+                    else:  # continue tolerance mode
+                        tol_epochs += 1
+                elif prev_train_loss - avg_train_loss <= es_dif:  # not in tolerance but to slow learning
+                    if es_tol == 0:  # no tolerance
+                        return
+                    else:  # enter tolerance mode
+                        tol_epochs += 1
+            prev_train_loss = avg_train_loss
 
     def predict(self, X, with_dropout=False):
 
