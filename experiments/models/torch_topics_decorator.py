@@ -1,5 +1,4 @@
-import copy
-
+import scipy
 import torch
 from scipy import stats
 from torch import nn
@@ -10,7 +9,6 @@ import numpy as np
 IMG_LEN = 1024
 TXT_LEN = 300
 BATCH_SIZE = 512
-#BATCH_SIZE = 2048
 
 
 def prepare_train_loader(X, y, verbose=0):
@@ -81,10 +79,19 @@ class TopicsDecorator:
             train_loss_sum = 0.0
             train_loss_count = 0
 
+            margin_sum = 0.0
+            margin_count = 0
             for x_img_cur, x_txt_cur, y_cur in train_loader:
 
                 self.optimizer.zero_grad()
                 output = self.model(x_img_cur, x_txt_cur)
+
+                part = np.partition(-np.exp(output.detach().numpy()), 1, axis=1)
+                margin = - part[:, 0] + part[:, 1]
+                margin = torch.tensor(margin.reshape(-1, 1)).float()
+                margin_sum += sum(margin)
+                margin_count += margin.shape[0]
+
                 if not weight_norm:
                     train_loss = F.nll_loss(output, torch.argmax(y_cur, dim=1))
                 else:
@@ -114,6 +121,7 @@ class TopicsDecorator:
 
             avg_train_loss = train_loss_sum / train_loss_count
             if verbose != 0:
+                print('avg margin:', margin_sum/margin_count)
                 print('epoch:', epoch, 'train_loss:', train_loss, 'average train loss', avg_train_loss)
 
             if validation_data is not None:
@@ -177,7 +185,7 @@ class TopicsDecorator:
         y_predicted = self.predict(X, **predict_kwargs)
         return np.exp(y_predicted)
 
-    def evaluate(self, X, y, verbose=0):
+    def evaluate(self, X, y, verbose=1):
         y_predicted = self.predict(X)
         loss = F.nll_loss(torch.from_numpy(y_predicted), torch.argmax(torch.from_numpy(y), dim=1))
 
@@ -197,12 +205,36 @@ class TopicsDecorator:
         return loss, correct / total
 
 
+# copy from https://github.com/seominseok0429/Learning-Loss-for-Active-Learning-Pytorch
+class MarginRankingLearningLoss(nn.Module):
+    def __init__(self, margin=1.0):
+        super(MarginRankingLearningLoss, self).__init__()
+        self.margin = margin
+
+    def forward(self, inputs, targets):
+        random = torch.randperm(inputs.size(0))
+        pred_loss = inputs[random]
+        pred_lossi = inputs[:inputs.size(0) // 2]
+        pred_lossj = inputs[inputs.size(0) // 2:]
+        target_loss = targets.reshape(inputs.size(0), 1)
+        target_loss = target_loss[random]
+        target_lossi = target_loss[:inputs.size(0) // 2]
+        target_lossj = target_loss[inputs.size(0) // 2:]
+        final_target = torch.sign(target_lossi - target_lossj)
+
+        return F.margin_ranking_loss(pred_lossi, pred_lossj, final_target, margin=self.margin, reduction='mean')
+
+
+loss_pred_criterion = MarginRankingLearningLoss()
+
+
 class LearningLossDecorator:
     def __init__(self, decorated_model, ll_model, ll_optimizer, ll_version=1):
         self.decorated_model = decorated_model
         self.ll_model = ll_model
         self.ll_optimizer = ll_optimizer
         self.ll_version = ll_version
+        self.correllation_history = []
 
     def fit(self, X, y, epochs=1, verbose=0, **decorated_model_fit_kwargs):
         if verbose != 0:
@@ -216,7 +248,6 @@ class LearningLossDecorator:
 
             self.ll_model.train()
             self.decorated_model.model.eval()
-            decorated_model_copy = copy.deepcopy(self.decorated_model.model)
 
             loss_loss_sum = 0.0
             loss_loss_count = 0
@@ -231,7 +262,15 @@ class LearningLossDecorator:
                     predicted_loss = self.ll_model(x_img_cur, x_txt_cur)
                 else:
                     predicted_loss = self.ll_model(output)
-                loss_loss = F.mse_loss(predicted_loss, actual_loss.view(-1, 1))
+
+                corr, p_val = scipy.stats.spearmanr(actual_loss.detach().numpy(), predicted_loss.detach().numpy())
+                print('spearman:', corr, 'p value_', p_val)
+                self.correllation_history.append((corr, p_val))
+
+                if self.ll_version == 4:
+                    loss_loss = loss_pred_criterion(predicted_loss, actual_loss)
+                else:
+                    loss_loss = F.mse_loss(predicted_loss, actual_loss.view(-1, 1))
 
                 loss_loss_sum += loss_loss
                 loss_loss_count += 1
@@ -239,13 +278,7 @@ class LearningLossDecorator:
                 loss_loss.backward()
                 self.ll_optimizer.step()
 
-            if verbose != 0:
-                print('start comparing parameters')
-                for p1, p2 in zip(decorated_model_copy.parameters(), self.decorated_model.model.parameters()):
-                    if p1.data.ne(p2.data).sum() > 0:
-                        print('decorated model changed')
-                print('parameters comparison finished')
-            self.decorated_model.fit(X, y, epochs=1, **decorated_model_fit_kwargs)
+            self.decorated_model.fit(X, y, epochs=1, verbose=verbose, **decorated_model_fit_kwargs)
 
     def predict(self, X, with_dropout=False):
         return self.decorated_model.predict(X, with_dropout)
@@ -253,7 +286,7 @@ class LearningLossDecorator:
     def predict_proba(self, X, **predict_kwargs):
         return self.decorated_model.predict_proba(X, **predict_kwargs)
 
-    def evaluate(self, X, y, verbose=0):
+    def evaluate(self, X, y, verbose=1):
         return self.decorated_model.evaluate(X, y, verbose)
 
     def predict_loss(self, X):
