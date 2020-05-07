@@ -102,6 +102,7 @@ class Experiment:
     def _setup_logger(self):
         self.logger = logging.getLogger('exp_' + self.name)
         self.logger.setLevel(logging.INFO)
+        Path("log").mkdir(parents=True, exist_ok=True)
         handler = logging.FileHandler('log/exp_' + self.name + '.log')
         handler.setLevel(logging.INFO)
         formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
