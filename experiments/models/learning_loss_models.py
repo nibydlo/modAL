@@ -120,6 +120,28 @@ class LearningLossModel2_1(nn.Module):
         return result_metric
 
 
+class LearningLossModel2_2(nn.Module):
+    def __init__(self, metrics=None):
+        super().__init__()
+
+        self.metrics = metrics
+
+        input_dim = 0
+
+        if metrics is not None:
+            input_dim += len(metrics)
+
+        self.fc = nn.Linear(input_dim, 1)
+
+    def forward(self, input):
+        metric_vals = [metric(input.detach()) for metric in self.metrics]
+        joined_metrics = torch.cat(tuple(metric_vals), dim=1)
+
+        x = self.fc(joined_metrics)
+
+        return x
+
+
 class LearningLossModel3(nn.Module):
     def __init__(self, model, metrics, n_hidden=1, d=4):
         super().__init__()
@@ -168,6 +190,14 @@ class LearningLossModel3_1(nn.Module):
 
         self.out = nn.Linear(d, 1)
         self.dropout = nn.modules.Dropout(p=0.5)
+
+    def get_params(self):
+        res = list(self.fc_0.parameters()) + list(self.bn_0.parameters())
+        for fc, bn in zip(self.fcs, self.bns):
+            res += list(fc.parameters())
+            res += list(bn.parameters())
+        res += self.out.parameters()
+        return res
 
     def forward(self, x_img, x_txt):
         if self.use_raw:
