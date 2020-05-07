@@ -1,6 +1,7 @@
 from typing import Union
 from pathlib import Path
 
+import torch
 from sklearn.utils import shuffle
 
 import random
@@ -10,6 +11,9 @@ import pickle
 import time
 import logging
 
+from torch import nn
+from torch.utils.data import DataLoader, TensorDataset
+
 from modAL import LearningLossActiveLearner
 from modAL.models.base import BaseLearner, BaseCommittee
 
@@ -17,10 +21,12 @@ random_name_length = 5
 
 
 def get_random_name():
-    return ''.join(map(str, np.random.randint(low = 0, high = 9, size = random_name_length)))
+    return ''.join(map(str, np.random.randint(low=0, high=9, size=random_name_length)))
+
 
 def is_multimodal(X):
     return isinstance(X, list) and isinstance(X[0], np.ndarray)
+
 
 class Experiment:
 
@@ -36,12 +42,27 @@ class Experiment:
             random_seed: int = random.randint(0, 100),
             pool_size: int = -1,
             name: str = get_random_name(),
+            autoencoder=None,
+            autoencoder_optim=None,
+            intermediate_state_saving=False,
+            intermediate_state_filename=None,
+            intermediate_state_freq=1,
             **teach_kwargs
     ):
         self.learner = learner
         self.n_queries = n_queries
         self.random_seed = random_seed
         self.n_instances = n_instances
+        self.autoencoder = autoencoder
+        self.autoencoder_optim = autoencoder_optim
+        self.intermediate_state_saving = intermediate_state_saving
+
+        if self.intermediate_state_saving and intermediate_state_filename is None:
+            raise ValueError("intermediate state can't be saved without intermediate_state_filename argument ")
+        self.intermediate_state_filename = intermediate_state_filename
+
+        self.intermediate_state_freq = intermediate_state_freq
+
         # self.init_size = self.learner.X_training.shape[0]
 
         if is_multimodal(X_pool):
@@ -90,18 +111,18 @@ class Experiment:
     def _out_of_data_warn(self):
 
         self.logger.warning('pool does not have enough data, batch size = '
-                           + str(self.n_instances)
-                           + ' but pool size = '
-                           + str(self.pool_size))
+                            + str(self.n_instances)
+                            + ' but pool size = '
+                            + str(self.pool_size))
 
     def save_state(self, state_name):
         state = {
             # 'init_size' : self.init_size,
-            'n_instances' : self.n_instances,
-            'n_queries' : self.n_queries,
-            'performance_history' : self.performance_history,
-            'time_per_query_history' : self.time_per_query_history,
-            'time_per_fit_history' : self.time_per_fit_history
+            'n_instances': self.n_instances,
+            'n_queries': self.n_queries,
+            'performance_history': self.performance_history,
+            'time_per_query_history': self.time_per_query_history,
+            'time_per_fit_history': self.time_per_fit_history
         }
         if isinstance(self.learner, LearningLossActiveLearner):
             state['loss_history'] = self.learner.loss_history
@@ -109,6 +130,56 @@ class Experiment:
         Path('/'.join(state_name.split('/')[:-1])).mkdir(parents=True, exist_ok=True)
         with open(state_name + '.pkl', 'wb') as f:
             pickle.dump(state, f)
+
+    def save_current_state(self, cur_step):
+
+        if cur_step % self.intermediate_state_freq != 0:
+            return
+
+
+        state = {
+            'n_instances': self.n_instances,
+            'cur_n_queries': cur_step + 1,
+            'performance_history': self.performance_history,
+            'time_per_query_history': self.time_per_query_history,
+            'time_per_fit_history': self.time_per_fit_history
+        }
+
+        Path('/'.join(self.intermediate_state_filename.split('/')[:-1])).mkdir(parents=True, exist_ok=True)
+        with open(self.intermediate_state_filename + '.pkl', 'wb') as f:
+            pickle.dump(state, f)
+
+        self.logger.info('state on step ' + str(cur_step) + ' saved')
+
+
+    # NOT FOR ANYTHING EXCEPT TOPICS TASK!
+    def fit_autoencoder(self):
+        criterion = nn.MSELoss()
+
+        x_img_train_t = torch.tensor(self.X_pool[0]).float()
+        x_txt_train_t = torch.tensor(self.X_pool[1]).float()
+
+        train_ds = TensorDataset(x_img_train_t, x_txt_train_t)
+        train_loader = DataLoader(train_ds, batch_size=512)
+
+        self.autoencoder.train()
+
+        loss_sum = 0.0
+        loss_count = 0
+        for x_img_cur, x_txt_cur in train_loader:
+            self.autoencoder.zero_grad()
+            out_img, out_txt = self.autoencoder(inp_img=x_img_cur, inp_txt=x_txt_cur)
+            loss_img = criterion(out_img, x_img_cur)
+            loss_txt = criterion(out_txt, x_txt_cur)
+            loss = loss_img + loss_txt
+
+            loss_sum += loss
+            loss_count += 1
+
+            loss.backward()
+            self.autoencoder_optim.step()
+
+        self.logger.info('autoencoder train loss ' + str(loss_sum/loss_count))
 
     def step(self, i=-1):
         self.logger.info('start step #' + str(i))
@@ -118,8 +189,16 @@ class Experiment:
             return
         start_time_query = time.time()
 
-        query_index, query_instance = self.learner.query(self.X_pool)
+        if self.learner.query_strategy.__name__ == 'diversity_sampling':
+            query_index, query_instance = self.learner.query(self.X_pool, labeled_pool=self.learner.X_training)
+        elif self.learner.query_strategy.__name__ == 'learning_loss_ideal':
+            query_index, query_instance = self.learner.query(self.X_pool, self.y_pool)
+        else:
+            query_index, query_instance = self.learner.query(self.X_pool)
+
         self.logger.info('query idx: ' + str(query_index))
+        print('classes of query: ' + str(np.argmax(self.y_pool, axis=1)[query_index]))
+        self.logger.info('classes of query: ' + str(np.argmax(self.y_pool, axis=1)[query_index]))
         self.time_per_query_history.append(time.time() - start_time_query)
 
         if is_multimodal(self.X_pool):
@@ -138,10 +217,17 @@ class Experiment:
             self.X_pool = np.delete(self.X_pool, query_index, axis=0)
         self.y_pool = np.delete(self.y_pool, query_index, axis=0)
 
+        if self.autoencoder is not None:
+            self.fit_autoencoder()
+
         score = self.learner.score(self.X_val, self.y_val)
         self.performance_history.append(score)
         self.logger.info('finish step #' + str(i) + ' for ' + str(time.time() - start_time_step) + ' sec')
         self.logger.info('current val_accuracy: ' + str(score))
+
+        if self.intermediate_state_saving or is_multimodal(self.X_pool) and self.X_pool[0].shape[0] == 0:
+            self.save_current_state(cur_step=i)
+
         return query_index, query_instance, score
 
     def run(self):
