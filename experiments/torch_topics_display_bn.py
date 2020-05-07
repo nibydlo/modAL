@@ -41,10 +41,10 @@ margin_accs = []
 
 min_n_queries = None
 
-for i in range(1, 2):
+for i in range(2, 3):
 
-    state = pickle.load(open('statistic/topics/torch_bn/passive_e1_i2000_b20_q200_' + str(i) + '.pkl', 'rb'))
-    passive_e1_accs.append(state['performance_history'])
+    # state = pickle.load(open('statistic/topics/torch_bn/passive_e1_i2000_b20_q200_' + str(i) + '.pkl', 'rb'))
+    # passive_e1_accs.append(state['performance_history'])
 
     # state = pickle.load(open('statistic/topics/torch_bn/passive_e5_i2000_b20_q200_' + str(i) + '.pkl', 'rb'))
     # passive_e5_accs.append(state['performance_history'])
@@ -82,8 +82,8 @@ for i in range(1, 2):
     # state = pickle.load(open('statistic/topics/torch_bn/ll2.0_margin_only_n_hidden1_i2000_b20_q200_' + str(i) + '.pkl', 'rb'))
     # ll2_margin_only_accs.append(state['performance_history'])
     #
-    state = pickle.load(open('statistic/topics/torch_bn/margin_inter_i2000_b20_q100_' + str(i) + '.pkl', 'rb'))
-    margin_accs.append(state['performance_history'])
+    # state = pickle.load(open('statistic/topics/torch_bn/margin_inter_i2000_b20_q100_' + str(i) + '.pkl', 'rb'))
+    # margin_accs.append(state['performance_history'])
 
     # state = pickle.load(open('statistic/topics/torch_bn/ll3_margin_bald_n_hidden1_i2000_b20_q200_test' + str(i) + '.pkl', 'rb'))
     # ll3_margin_bald_1_accs.append(state['performance_history'])
@@ -112,10 +112,10 @@ for i in range(1, 2):
     # state = pickle.load(open('statistic/topics/torch_bn/ll4.0_margin_n_hidden2_i2000_b20_q200_' + str(i) + '.pkl', 'rb'))
     # ll4_margin_2_accs.append(state['performance_history'])
 
-    state = pickle.load(open('statistic/topics/torch_bn/ll_ideal_margin_i2000_b20_q200_' + str(i) + '.pkl', 'rb'))
+    state = pickle.load(open('statistic/topics/torch_bn/ll_ideal_i2000_b20_q200_' + str(i) + '.pkl', 'rb'))
     ll_ideal_accs.append(state['performance_history'])
 
-n_queries = 200
+n_queries = len(state['performance_history']) - 1
 plot_conf_int(passive_e1_accs, 2000, 20, n_queries, 'passive_e1', color='C0')
 plot_conf_int(margin_accs, 2000, 20, n_queries, 'margin', color='C2')
 
@@ -144,7 +144,7 @@ plot_conf_int(margin_accs, 2000, 20, n_queries, 'margin', color='C2')
 # plot_conf_int(ll3_1_margin_bald_hidden1_accs, 2000, 20, 100, 'll3.1 margin bald 1', color='C9')
 # plot_conf_int(ll3_1_margin_bald_hidden2_accs, 2000, 20, 200, 'll3.1 margin bald 2', color='C11')
 # plot_conf_int(ll4_margin_2_accs, 2000, 20, 200, 'll4.0 margin 2', color='C11')
-plot_conf_int(ll_ideal_accs, 2000, 20, 200, 'll ideal', color='C11')
+plot_conf_int(ll_ideal_accs, 2000, 20, n_queries, 'll ideal', color='C11')
 
 
 plt.xlabel('labeled size')
