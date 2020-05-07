@@ -34,7 +34,7 @@ def get_unpacked_data():
         x_txt = np.stack(df['x2'].map(unpck_txt), axis=0)
         y = to_categorical(np.array(df['y1']), N_CLASSES)
 
-        topics_pickle_out = open("experiments/datasets/resources/topics/unpacked_topics.pickle", "wb")
+        topics_pickle_out = open("datasets/resources/topics/unpacked_topics.pickle", "wb")
         pickle.dump((x_img, x_txt, y), topics_pickle_out)
         topics_pickle_out.close()
 
