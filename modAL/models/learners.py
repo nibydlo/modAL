@@ -22,6 +22,8 @@ class ActiveLearner(BaseLearner):
     """
     This class is an abstract model of a general active learning algorithm.
 
+    adapted for multiple inputs
+
     Args:
         estimator: The estimator to be used in the active learning loop.
         query_strategy: Function providing the query strategy for the active learning loop,
@@ -108,6 +110,8 @@ Classes for Bayesian optimization
 class BayesianOptimizer(BaseLearner):
     """
     This class is an abstract model of a Bayesian optimizer algorithm.
+
+    not adapted for multiople inputs
 
     Args:
         estimator: The estimator to be used in the Bayesian optimization. (For instance, a
@@ -221,7 +225,6 @@ class BayesianOptimizer(BaseLearner):
             **fit_kwargs: Keyword arguments to be passed to the fit method of the predictor.
         """
         self._add_training_data(X, y)
-
         if not only_new:
             self._fit_to_known(bootstrap=bootstrap, **fit_kwargs)
         else:

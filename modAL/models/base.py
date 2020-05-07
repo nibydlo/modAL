@@ -24,6 +24,8 @@ class BaseLearner(ABC, BaseEstimator):
     """
     Core abstraction in modAL.
 
+    adapted for multiple inputs in format [input1, input2, ...]
+
     Args:
         estimator: The estimator to be used in the active learning loop.
         query_strategy: Function providing the query strategy for the active learning loop,
@@ -105,9 +107,19 @@ class BaseLearner(ABC, BaseEstimator):
         if not bootstrap:
             self.estimator.fit(self.X_training, self.y_training, **fit_kwargs)
         else:
-            n_instances = self.X_training.shape[0]
+            if isinstance(self.X_training, list) and isinstance(self.X_training[0], np.ndarray):
+                n_instances = self.X_training[0].shape[0]
+            else:
+                n_instances = self.X_training.shape[0]
+
             bootstrap_idx = np.random.choice(range(n_instances), n_instances, replace=True)
-            self.estimator.fit(self.X_training[bootstrap_idx], self.y_training[bootstrap_idx], **fit_kwargs)
+
+            if isinstance(self.X_training, list) and isinstance(self.X_training[0], np.ndarray):
+                X_train = [x[bootstrap_idx] for x in self.X_training]
+            else:
+                X_train = self.X_training[bootstrap_idx]
+
+            self.estimator.fit(X_train, self.y_training[bootstrap_idx], **fit_kwargs)
 
         return self
 
@@ -130,8 +142,19 @@ class BaseLearner(ABC, BaseEstimator):
         if not bootstrap:
             self.estimator.fit(X, y, **fit_kwargs)
         else:
-            bootstrap_idx = np.random.choice(range(X.shape[0]), X.shape[0], replace=True)
-            self.estimator.fit(X[bootstrap_idx], y[bootstrap_idx])
+            if isinstance(X, list) and isinstance(X[0], np.ndarray):
+                n_instances = X[0].shape[0]
+            else:
+                n_instances = X.shape[0]
+
+            bootstrap_idx = np.random.choice(range(n_instances), n_instances, replace=True)
+
+            if isinstance(X, list) and isinstance(X[0], np.ndarray):
+                X_train = [x[bootstrap_idx] for x in X]
+            else:
+                X_train = X[bootstrap_idx]
+
+            self.estimator.fit(X_train, y[bootstrap_idx])
 
         return self
 

@@ -7,13 +7,13 @@ from modAL.utils.data import modALinput
 from sklearn.metrics import accuracy_score
 
 import numpy as np
-import tensorflow.python.keras as keras
+import tensorflow.keras as keras
 import tensorflow as tf
 
 
 class KerasActiveLearner(ActiveLearner):
     def score(self, X: modALinput, y: modALinput, **score_kwargs) -> Any:
-        return self.estimator.evaluate(X, y, verbose=0, **score_kwargs)[1]
+        return self.estimator.evaluate(X, y, **score_kwargs)[1]
 
 
 class DropoutActiveLearner(ActiveLearner):
