@@ -5,10 +5,10 @@ import matplotlib.pyplot as plt
 CC = 0.95
 
 
-def plot_conf_int(stat, init_size, n_instances, n_queries, stat_name):
+def plot_conf_int(stat, init_size, n_instances, n_queries, stat_name, **plt_kwargs):
     if len(stat) == 0:
         return
-    q = len(stat[0])
+    q = n_queries + 1
     n = len(stat)
     mean = [0 for i in range(q)]
     sum_1 = [0 for i in range(q)]
@@ -29,5 +29,6 @@ def plot_conf_int(stat, init_size, n_instances, n_queries, stat_name):
         [m + s for (m, s) in zip(mean, sigma)],
         [m - s for (m, s) in zip(mean, sigma)],
         label=stat_name,
-        alpha=0.7
+        alpha=0.7,
+        **plt_kwargs
     )
