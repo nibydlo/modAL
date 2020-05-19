@@ -1,4 +1,5 @@
 import tensorflow as tf
+import pandas as pd
 from keras.utils.np_utils import to_categorical
 
 def get_mnist():
@@ -11,9 +12,16 @@ def get_mnist():
     x_test /= 255
     return (x, y), (x_test, y_test)
 
+
 def get_categorical_mnist():
     (x, y), (x_test, y_test) = get_mnist()
     y = to_categorical(y, 10)
     y_test = to_categorical(y_test, 10)
     return (x, y), (x_test, y_test)
+
+
+def get_topics():
+    filename = "/Users/dmitry/Downloads/topics_dataset.json"
+    df = pd.read_json(filename, lines=True)
+    return df
 
