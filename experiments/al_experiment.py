@@ -34,9 +34,10 @@ class Experiment:
             self,
             learner: Union[BaseLearner, BaseCommittee],
             X_pool: Union[np.ndarray, sp.csr_matrix, list],
-            y_pool: Union[np.ndarray, sp.csr_matrix],
+            y_pool: Union[np.ndarray, sp.csr_matrix, list],
+            original_indices_pool: np.ndarray,
             X_val: Union[np.ndarray, sp.csr_matrix, list] = None,
-            y_val: Union[np.ndarray, sp.csr_matrix] = None,
+            y_val: Union[np.ndarray, sp.csr_matrix, list] = None,
             n_instances: int = 1,
             n_queries: int = 10,
             random_seed: int = random.randint(0, 100),
@@ -65,28 +66,35 @@ class Experiment:
 
         # self.init_size = self.learner.X_training.shape[0]
 
-        if is_multimodal(X_pool):
-            n_instances = X_pool[0].shape[0]
-            idx = np.random.choice(range(n_instances), n_instances, replace=False)
-            X_pool = [x[idx] for x in X_pool]
-            y_pool = y_pool[idx]
-        else:
-            X_pool, y_pool = shuffle(X_pool, y_pool, random_state=random_seed)
+        np.random.seed(random_seed)
+        n_instances = X_pool[0].shape[0] if is_multimodal(X_pool) else X_pool.shape[0]
+        idx = np.random.choice(range(n_instances), n_instances, replace=False)
+        X_pool = [x[idx] for x in X_pool] if is_multimodal(X_pool) else X_pool[idx]
+        y_pool = [y[idx] for y in y_pool] if is_multimodal(y_pool) else y_pool[idx]
+        original_indices_pool = original_indices_pool[idx]
 
         real_size = X_pool[0].shape[0] if is_multimodal(X_pool) else X_pool.shape[0]
 
         if 0 <= pool_size < real_size:
-            if isinstance(X_pool, list) and isinstance(X_pool[0], np.ndarray):
+            if is_multimodal(X_pool):
                 X_pool = [x[:pool_size] for x in X_pool]
             else:
                 X_pool = X_pool[:pool_size]
-            y_pool = y_pool[:pool_size]
+
+            if is_multimodal(y_pool):
+                y_pool = [y[:pool_size] for y in y_pool]
+            else:
+                y_pool = y_pool[:pool_size]
+
+            original_indices_pool = original_indices_pool[:pool_size]
         else:
             pool_size = real_size
 
         self.pool_size = pool_size
         self.X_pool = X_pool
         self.y_pool = y_pool
+
+        self.original_indices_pool = original_indices_pool
 
         self.X_val = X_pool if X_val is None else X_val
         self.y_val = y_pool if y_val is None else y_val
@@ -110,7 +118,6 @@ class Experiment:
         self.logger.addHandler(handler)
 
     def _out_of_data_warn(self):
-
         self.logger.warning('pool does not have enough data, batch size = '
                             + str(self.n_instances)
                             + ' but pool size = '
@@ -136,7 +143,6 @@ class Experiment:
 
         if cur_step % self.intermediate_state_freq != 0:
             return
-
 
         state = {
             'n_instances': self.n_instances,
@@ -192,31 +198,43 @@ class Experiment:
 
         if self.learner.query_strategy.__name__ == 'diversity_sampling':
             query_index, query_instance = self.learner.query(self.X_pool, labeled_pool=self.learner.X_training)
-        elif self.learner.query_strategy.__name__ == 'learning_loss_ideal':
+        elif 'learning_loss_ideal' in self.learner.query_strategy.__name__:
             query_index, query_instance = self.learner.query(self.X_pool, self.y_pool)
         else:
             query_index, query_instance = self.learner.query(self.X_pool)
 
         self.logger.info('query idx: ' + str(query_index))
-        print('classes of query: ' + str(np.argmax(self.y_pool, axis=1)[query_index]))
-        self.logger.info('classes of query: ' + str(np.argmax(self.y_pool, axis=1)[query_index]))
         self.time_per_query_history.append(time.time() - start_time_query)
 
         if is_multimodal(self.X_pool):
-            X = [x[query_index] for x in self.X_pool]
+            X_query = [x[query_index] for x in self.X_pool]
         else:
-            X = self.X_pool[query_index]
-        y = self.y_pool[query_index]
+            X_query = self.X_pool[query_index]
+
+        if is_multimodal(self.y_pool):
+            y_query = [y[query_index] for y in self.y_pool]
+        else:
+            y_query = self.y_pool[query_index]
+
+        original_indices_query = self.original_indices_pool[query_index]
+        self.logger.info('query topics: ' + str(np.argmax(y_query, axis=1)))
+        self.logger.info('query original indices: ' + str(original_indices_query))
 
         start_time_fit = time.time()
-        self.learner.teach(X=X, y=y, **self.teach_kwargs)
+        self.learner.teach(X=X_query, y=y_query, **self.teach_kwargs)
         self.time_per_fit_history.append(time.time() - start_time_fit)
 
         if is_multimodal(self.X_pool):
             self.X_pool = [np.delete(x, query_index, axis=0) for x in self.X_pool]
         else:
             self.X_pool = np.delete(self.X_pool, query_index, axis=0)
-        self.y_pool = np.delete(self.y_pool, query_index, axis=0)
+
+        if is_multimodal(self.y_pool):
+            self.y_pool = [np.delete(y, query_index, axis=0) for y in self.y_pool]
+        else:
+            self.y_pool = np.delete(self.y_pool, query_index, axis=0)
+
+        self.original_indices_pool = np.delete(self.original_indices_pool, query_index, axis=0)
 
         if self.autoencoder is not None:
             self.fit_autoencoder()
@@ -224,7 +242,11 @@ class Experiment:
         score = self.learner.score(self.X_val, self.y_val)
         self.performance_history.append(score)
         self.logger.info('finish step #' + str(i) + ' for ' + str(time.time() - start_time_step) + ' sec')
-        self.logger.info('current val_accuracy: ' + str(score))
+        if not isinstance(score, dict):
+            self.logger.info('current val_accuracy: ' + str(score))
+        else:
+            for k, v in score.items():
+                self.logger.info('current val ' + k + ': ' + str(v))
 
         if self.intermediate_state_saving or is_multimodal(self.X_pool) and self.X_pool[0].shape[0] == 0:
             self.save_current_state(cur_step=i)
